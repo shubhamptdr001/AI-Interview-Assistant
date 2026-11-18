@@ -3,7 +3,7 @@
 An AI-powered web application that helps students and job-seekers prepare for technical interviews — analyze your resume, chat with it using RAG, generate company-specific questions, get coding help, and practice mock interviews with instant AI feedback.
 
 **🔗 Live Demo:** [https://ai-interview-assistant-tuezhxzz3czavjrqclh9kc.streamlit.app/](#)
-**📂 GitHub:** [https://github.com/PriyalPatidar/AI-Interview-Assistant](#)
+**📂 GitHub:** [https://github.com/shubhamptdr001/AI-Interview-Assistant](https://github.com/shubhamptdr001/AI-Interview-Assistant)
 
 ---
 
@@ -36,7 +36,7 @@ An AI-powered web application that helps students and job-seekers prepare for te
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/your-username/AI-Interview-Assistant.git
+git clone https://github.com/shubhamptdr001/AI-Interview-Assistant.git
 cd AI-Interview-Assistant
 ```
 
