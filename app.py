@@ -268,8 +268,42 @@ elif page == "🏢 Company Questions":
         )
         st.progress((curr_idx + 1) / total_q)
 
+        # Detect incomplete or metadata-only question from old session state
+        is_corrupt = (
+            curr_q.strip().lower()
+            in [
+                "type: technical",
+                "type: behavioral",
+                "type: hr",
+                "technical",
+                "behavioral",
+                "hr",
+            ]
+            or len(curr_q.strip()) < 15
+        )
+
+        if is_corrupt:
+            st.warning("⚠️ The saved question was incomplete. Click below to generate fresh, complete questions in English.")
+            if st.button("🔄 Generate Fresh Questions Now", type="primary", key=f"btn_fix_{curr_idx}"):
+                with st.spinner("Generating fresh questions via AI..."):
+                    try:
+                        fresh_q = api_client.generate_company_questions(
+                            company=st.session_state.cq_company,
+                            role=st.session_state.cq_role,
+                            count=total_q or 5,
+                            difficulty=st.session_state.cq_difficulty,
+                        )
+                        if fresh_q:
+                            st.session_state.cq_questions = fresh_q
+                            st.session_state.cq_idx = 0
+                            st.session_state.cq_evaluations = {}
+                            st.session_state.cq_answers = {}
+                            st.rerun()
+                    except Exception as err:
+                        st.error(f"Error regenerating questions: {err}")
+
         st.markdown(f"### ❓ Question {curr_idx + 1}")
-        st.markdown(f"**{curr_q}**")
+        st.info(f"📌 **{curr_q}**")
 
         # Answer text box for the current question
         saved_answer = st.session_state.cq_answers.get(curr_idx, "")
@@ -315,8 +349,11 @@ elif page == "🏢 Company Questions":
                 st.rerun()
 
         with col_reset:
-            if st.button("🏁 End Session", key=f"btn_end_{curr_idx}"):
+            if st.button("🔄 New Session", key=f"btn_end_{curr_idx}"):
                 st.session_state.cq_active = False
+                st.session_state.cq_questions = []
+                st.session_state.cq_evaluations = {}
+                st.session_state.cq_answers = {}
                 st.rerun()
 
         # Display Evaluation if submitted for current question

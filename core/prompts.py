@@ -17,12 +17,19 @@ Sirf diye gaye context ke base pe Hinglish mein clear, natural jawab do.
 Agar context mein jawab na mile to bolo "Ye information resume mein nahi mili."."""
 
 
-COMPANY_QUESTIONS_PROMPT_TEMPLATE = """Tum ek interview expert ho. "{company}" company ke "{role}" role ke liye
-{count} real, commonly asked interview questions do.
-Difficulty level: {difficulty}
+COMPANY_QUESTIONS_PROMPT_TEMPLATE = """You are a senior technical interviewer and hiring manager.
+Generate exactly {count} realistic, high-frequency interview questions for the role of "{role}" at "{company}".
+Difficulty Level: {difficulty}
 
-Numbered list format mein do. Har question ke saath ek line mein bata do
-ki ye kis type ka hai (Technical / HR / Behavioral). Hinglish mein likho."""
+Requirements:
+1. Write each question completely and clearly in professional English.
+2. Provide a realistic mix of Technical, Architectural, and Behavioral questions.
+3. Format as a strict numbered list from 1 to {count}.
+4. On each numbered line, provide the complete question text followed by its category in parentheses at the end, for example:
+1. Explain how you would optimize database queries and indexes for high-write workloads in PostgreSQL. (Technical)
+2. Describe a complex technical bug you diagnosed in production and how you fixed it. (Behavioral)
+
+CRITICAL: Do NOT put 'Type: Technical' or any category on a separate line. Each numbered item must contain the full question text on that line."""
 
 
 INTERVIEW_QUESTION_PROMPT_TEMPLATE = """Tum ek technical interviewer ho jo "{role}" role ke liye interview le rahe ho.

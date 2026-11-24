@@ -7,6 +7,7 @@ No UI dependencies.
 """
 
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 from core.config import settings
@@ -121,6 +122,89 @@ def ask_llm(prompt: str, max_tokens: int = 700, api_key: Optional[str] = None) -
         return f"⚠️ Groq API Error: {err}"
 
 
+def _parse_questions_from_text(raw: str, count: int = 5) -> List[str]:
+    """Parse raw LLM generation into a clean list of complete interview questions.
+
+    Robustly handles single-line numbered lists, multi-line numbered lists with separate
+    'Type: ...' metadata lines, bolded markdown numbering, and bullet points.
+    """
+    if not raw or not raw.strip():
+        return []
+
+    # If it is an API error message, return it directly
+    if raw.strip().startswith("⚠️"):
+        return [raw.strip()]
+
+    # Pattern to find numbered items (e.g. '1. ', '1) ', '**1.**', '1 - ') or bullets
+    pattern = re.compile(
+        r'(?:^|\n)\s*(?:\*\*)?(?:(?:\d{1,2}[\.\)]|\-|\*))\s*(?:\*\*)?\s*(.*?)(?=(?:\n\s*(?:\*\*)?(?:(?:\d{1,2}[\.\)]|\-|\*))\s*(?:\*\*)?)|$)',
+        re.DOTALL,
+    )
+
+    matches = [m.group(1).strip() for m in pattern.finditer(raw) if m.group(1).strip()]
+    cleaned_questions: List[str] = []
+
+    for item in matches:
+        # Strip outer bold/italic markdown
+        cleaned = re.sub(r"^\*+|\*+$", "", item).strip()
+        lines = [line.strip() for line in cleaned.split("\n") if line.strip()]
+        if not lines:
+            continue
+
+        # Check if first line is only metadata (e.g., 'Type: Technical' or 'Category: ...')
+        if len(lines) > 1 and re.match(
+            r"^(?:type|category|round)\s*:\s*(?:technical|behavioral|hr|system design|coding)?\s*$",
+            lines[0],
+            re.IGNORECASE,
+        ):
+            meta_line = lines[0]
+            body_lines = lines[1:]
+            q_text = " ".join(body_lines)
+            type_match = re.search(r"(technical|behavioral|hr|system design|coding)", meta_line, re.IGNORECASE)
+            if type_match and not re.search(
+                r"\((technical|behavioral|hr|system design|coding)\)", q_text, re.IGNORECASE
+            ):
+                q_text = f"{q_text} ({type_match.group(1).capitalize()})"
+        # Check if last line is metadata
+        elif len(lines) > 1 and re.match(
+            r"^(?:type|category|round)\s*:\s*(?:technical|behavioral|hr|system design|coding)?\s*$",
+            lines[-1],
+            re.IGNORECASE,
+        ):
+            meta_line = lines[-1]
+            body_lines = lines[:-1]
+            q_text = " ".join(body_lines)
+            type_match = re.search(r"(technical|behavioral|hr|system design|coding)", meta_line, re.IGNORECASE)
+            if type_match and not re.search(
+                r"\((technical|behavioral|hr|system design|coding)\)", q_text, re.IGNORECASE
+            ):
+                q_text = f"{q_text} ({type_match.group(1).capitalize()})"
+        else:
+            q_text = " ".join(lines)
+
+        # Strip prefixes like 'Question: ', 'Q1: ', 'Type: Technical - '
+        q_text = re.sub(r"^(?:question\s*\d*\s*:\s*|q\s*\d*\s*:\s*)", "", q_text, flags=re.IGNORECASE).strip()
+        q_text = re.sub(
+            r"^(?:type|category)\s*:\s*(?:technical|behavioral|hr|system design|coding)\s*[-:]\s*",
+            "",
+            q_text,
+            flags=re.IGNORECASE,
+        ).strip()
+
+        # Sanity check: must be a substantive question, not just a standalone label
+        if len(q_text) >= 15 and not re.match(
+            r"^(?:type\s*:\s*)?(?:technical|behavioral|hr|coding)\s*$", q_text, re.IGNORECASE
+        ):
+            cleaned_questions.append(q_text)
+
+    # Fallback to double newline split if list parsing yielded nothing
+    if not cleaned_questions:
+        paragraphs = [p.strip() for p in raw.split("\n\n") if len(p.strip()) >= 15]
+        cleaned_questions = paragraphs
+
+    return cleaned_questions[:count] if cleaned_questions else [raw.strip()]
+
+
 def generate_questions(
     company: str,
     role: str,
@@ -150,28 +234,7 @@ def generate_questions(
         difficulty=difficulty,
     )
     raw = ask_llm(prompt, max_tokens=900, api_key=api_key)
-
-    # Clean lines into structured list
-    questions = []
-    for line in raw.split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-        # Catch numbered lines e.g. "1. ", "1) "
-        if line[0].isdigit() and len(line) > 2 and line[1] in ". )-":
-            cleaned = line.lstrip("0123456789.-) ").strip()
-            if cleaned:
-                questions.append(cleaned)
-        elif line.startswith("- ") or line.startswith("* "):
-            cleaned = line[2:].strip()
-            if cleaned:
-                questions.append(cleaned)
-
-    # If parsing didn't find clear items, return non-empty paragraphs
-    if not questions and raw:
-        questions = [p.strip() for p in raw.split("\n\n") if p.strip()]
-
-    return questions[:count] if questions else [raw]
+    return _parse_questions_from_text(raw, count=count)
 
 
 def generate_interview_question(

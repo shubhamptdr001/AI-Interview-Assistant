@@ -21,6 +21,21 @@ class TestLLMCore:
         assert "process and thread" in questions[0]
         assert "garbage collection" in questions[1]
 
+    def test_generate_questions_multiline_and_metadata_format(self, monkeypatch):
+        import core.llm
+        raw_multiline = (
+            "1. Type: Technical\n"
+            "Explain how indexing works in PostgreSQL and when to avoid it.\n"
+            "2. Type: Behavioral\n"
+            "Describe a time you handled a severe production outage.\n"
+        )
+        monkeypatch.setattr(core.llm, "ask_llm", lambda prompt, **kwargs: raw_multiline)
+        questions = core.llm.generate_questions(company="Meta", role="Backend", count=2)
+        assert len(questions) == 2
+        assert "indexing works" in questions[0]
+        assert "production outage" in questions[1]
+        assert "Type: Technical" not in questions[0]
+
     def test_generate_questions_empty_company_raises(self):
         with pytest.raises(ValueError, match="Company and role must both be provided"):
             generate_questions(company="", role="AI Engineer")
