@@ -4,12 +4,16 @@ modules/resume_analyzer.py
 PDF/DOCX se text nikaalta hai aur skills match karta hai.
 """
 
-import PyPDF2
-import docx
 from data.skills_bank import SKILLS_BANK
 
 
 def extract_text_from_pdf(uploaded_file):
+    try:
+        import PyPDF2
+    except ImportError:
+        raise ImportError(
+            "The 'PyPDF2' package is required to read PDF files. Install it with: pip install PyPDF2"
+        )
     reader = PyPDF2.PdfReader(uploaded_file)
     text = ""
     for page in reader.pages:
@@ -18,6 +22,12 @@ def extract_text_from_pdf(uploaded_file):
 
 
 def extract_text_from_docx(uploaded_file):
+    try:
+        import docx
+    except ImportError:
+        raise ImportError(
+            "The 'python-docx' package is required to read DOCX files. Install it with: pip install python-docx"
+        )
     document = docx.Document(uploaded_file)
     text = "\n".join([para.text for para in document.paragraphs])
     return text
