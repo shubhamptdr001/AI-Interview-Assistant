@@ -101,6 +101,9 @@ async def evaluate_answer(payload: ScoreRequest):
         )
         return ScoreResponse(
             score=result["score"],
+            correctness_percent=result.get("correctness_percent", result["score"] * 10),
+            what_was_good=result.get("what_was_good", ""),
+            what_is_missing=result.get("what_is_missing", ""),
             feedback=result["feedback"],
         )
     except ValueError as e:

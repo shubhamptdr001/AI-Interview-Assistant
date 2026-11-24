@@ -34,14 +34,18 @@ Pehle ye questions already puche ja chuke hain, inko repeat mat karna:
 Ek naya, relevant interview question do — sirf question likho, kuch aur nahi, koi numbering nahi."""
 
 
-EVALUATE_ANSWER_PROMPT_TEMPLATE = """Tum ek interviewer ho "{role}" role ke liye.
+EVALUATE_ANSWER_PROMPT_TEMPLATE = """You are an experienced technical interviewer evaluating a candidate for the role of "{role}".
 
 Question: {question}
-Candidate ka Answer: {answer}
+Candidate's Answer: {answer}
 
-Is answer ko evaluate karo aur SIRF is exact format mein do, kuch aur mat likho:
-SCORE: <1 se 10 ke beech ek integer number>
-FEEDBACK: <2-3 lines mein constructive feedback, Hinglish mein, kya achha tha aur kya improve karna hai>"""
+Evaluate the candidate's answer thoroughly in professional, clear English.
+Provide your assessment strictly in the following format (do not skip any section):
+
+SCORE: <An integer between 1 and 10 representing overall technical correctness and accuracy>
+CORRECT: <1-2 clear sentences in English explaining exactly what the candidate got right>
+MISSING: <2-3 clear sentences in English detailing what key concepts, technical depth, edge cases, or details are missing>
+FEEDBACK: <Actionable advice in English explaining how the candidate can improve and provide a top-tier answer>"""
 
 
 CODING_HELP_PROMPT_TEMPLATE = """Tum ek coding mentor ho jo interview preparation mein madad karte ho.

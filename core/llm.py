@@ -212,6 +212,9 @@ def score_answer(
 ) -> Dict[str, Any]:
     """Evaluate a candidate's answer to an interview question.
 
+    Returns score (1-10), correctness percentage, what was correct,
+    and what was missing in clear English.
+
     Args:
         question: The interview question asked.
         answer: Candidate's response.
@@ -219,14 +222,18 @@ def score_answer(
         api_key: Optional key override.
 
     Returns:
-        Dictionary with 'score' (int 1-10) and 'feedback' (str).
+        Dictionary with 'score', 'correctness_percent', 'what_was_good',
+        'what_is_missing', and 'feedback'.
     """
     if not question or not question.strip():
         raise ValueError("Question cannot be empty.")
     if not answer or not answer.strip():
         return {
             "score": 1,
-            "feedback": "Koi answer provide nahi kiya gaya. Please attempt the question.",
+            "correctness_percent": 10,
+            "what_was_good": "No answer was provided.",
+            "what_is_missing": "The complete answer was missing. Please attempt the question to receive technical evaluation.",
+            "feedback": "Please type your technical response before submitting.",
         }
 
     prompt = EVALUATE_ANSWER_PROMPT_TEMPLATE.format(
@@ -234,28 +241,56 @@ def score_answer(
         question=question.strip(),
         answer=answer.strip(),
     )
-    raw = ask_llm(prompt, max_tokens=400, api_key=api_key)
+    raw = ask_llm(prompt, max_tokens=600, api_key=api_key)
 
     score = 5
+    correct = ""
+    missing = ""
     feedback = raw
 
     try:
+        current_section = None
         for line in raw.split("\n"):
-            line = line.strip()
-            if line.upper().startswith("SCORE:"):
-                digits = "".join(filter(str.isdigit, line))
+            line_str = line.strip()
+            if not line_str:
+                continue
+            if line_str.upper().startswith("SCORE:"):
+                digits = "".join(filter(str.isdigit, line_str))
                 if digits:
                     parsed_score = int(digits)
-                    # Clamp score between 1 and 10
                     score = max(1, min(10, parsed_score))
-            elif line.upper().startswith("FEEDBACK:"):
-                feedback = line[len("FEEDBACK:") :].strip()
+                current_section = "SCORE"
+            elif line_str.upper().startswith("CORRECT:"):
+                correct = line_str[len("CORRECT:") :].strip()
+                current_section = "CORRECT"
+            elif line_str.upper().startswith("MISSING:"):
+                missing = line_str[len("MISSING:") :].strip()
+                current_section = "MISSING"
+            elif line_str.upper().startswith("FEEDBACK:"):
+                feedback = line_str[len("FEEDBACK:") :].strip()
+                current_section = "FEEDBACK"
+            else:
+                if current_section == "CORRECT":
+                    correct += " " + line_str
+                elif current_section == "MISSING":
+                    missing += " " + line_str
+                elif current_section == "FEEDBACK":
+                    feedback += " " + line_str
     except Exception as e:
-        logger.warning(f"Error parsing score from LLM output: {e}")
+        logger.warning(f"Error parsing evaluation response: {e}")
+
+    # Fallbacks if sections were not cleanly formatted
+    if not correct:
+        correct = "You covered the fundamental concept." if score >= 5 else "An initial attempt was made."
+    if not missing:
+        missing = "Consider including specific implementation examples, complexity analysis, and edge cases."
 
     return {
         "score": score,
-        "feedback": feedback,
+        "correctness_percent": score * 10,
+        "what_was_good": correct.strip(),
+        "what_is_missing": missing.strip(),
+        "feedback": feedback.strip(),
     }
 
 

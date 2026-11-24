@@ -22,7 +22,7 @@ def mock_llm_response(monkeypatch):
     def _mock_ask(prompt: str, max_tokens: int = 700, api_key=None) -> str:
         prompt_lower = prompt.lower()
         if "score:" in prompt_lower or "evaluate" in prompt_lower:
-            return "SCORE: 8\nFEEDBACK: Excellent answer with strong architectural fundamentals."
+            return "SCORE: 8\nCORRECT: Solid understanding of core concepts.\nMISSING: Edge cases and scale.\nFEEDBACK: Excellent answer with strong architectural fundamentals."
         elif "interview questions" in prompt_lower or "commonly asked" in prompt_lower:
             return "1. Explain the difference between process and thread.\n2. How does garbage collection work in Python?"
         elif "coding mentor" in prompt_lower:

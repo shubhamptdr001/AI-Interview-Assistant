@@ -198,41 +198,159 @@ elif page == "💬 PDF Chat (RAG)":
 
 
 # ============================================================
-# 🏢 COMPANY QUESTIONS
+# 🏢 COMPANY QUESTIONS (INTERACTIVE PRACTICE)
 # ============================================================
 elif page == "🏢 Company Questions":
-    st.title("🏢 Company-Specific Interview Questions")
-    st.write("Enter a company and role — AI will generate realistic interview questions.")
+    st.title("🏢 Company-Specific Interview Practice")
+    st.write("Generate targeted interview questions for any company and practice them one-by-one with instant AI feedback in English.")
 
-    col1, col2 = st.columns(2)
-    with col1:
-        company = st.text_input("Company Name", placeholder="e.g. Google, TCS, Microsoft")
-    with col2:
-        role = st.text_input("Role", placeholder="e.g. AI Engineer, Software Developer")
+    # Initialize session state for interactive company questions
+    if "cq_active" not in st.session_state:
+        st.session_state.cq_active = False
+        st.session_state.cq_questions = []
+        st.session_state.cq_idx = 0
+        st.session_state.cq_company = ""
+        st.session_state.cq_role = ""
+        st.session_state.cq_difficulty = "Medium"
+        st.session_state.cq_evaluations = {}
+        st.session_state.cq_answers = {}
 
-    col3, col4 = st.columns(2)
-    with col3:
-        difficulty = st.selectbox("Difficulty", ["Easy", "Medium", "Hard"], index=1)
-    with col4:
-        count = st.slider("Number of Questions", min_value=3, max_value=10, value=5)
+    if not st.session_state.cq_active:
+        col1, col2 = st.columns(2)
+        with col1:
+            company = st.text_input("Company Name", placeholder="e.g. Google, TCS, Microsoft", value=st.session_state.cq_company)
+        with col2:
+            role = st.text_input("Role", placeholder="e.g. AI Engineer, Software Developer", value=st.session_state.cq_role)
 
-    if st.button("Generate Questions", type="primary"):
-        if not company.strip() or not role.strip():
-            st.warning("Please fill in both Company and Role.")
-        else:
-            with st.spinner("Generating questions via FastAPI..."):
-                try:
-                    questions = api_client.generate_company_questions(
-                        company=company,
-                        role=role,
-                        count=count,
-                        difficulty=difficulty,
-                    )
-                    st.markdown("### 📝 Interview Questions")
-                    for q in questions:
-                        st.markdown(f"- {q}")
-                except Exception as e:
-                    st.error(f"Error generating questions: {str(e)}")
+        col3, col4 = st.columns(2)
+        with col3:
+            difficulty = st.selectbox("Difficulty", ["Easy", "Medium", "Hard"], index=1)
+        with col4:
+            count = st.slider("Number of Questions", min_value=3, max_value=10, value=5)
+
+        if st.button("🚀 Start Practice Session", type="primary"):
+            if not company.strip() or not role.strip():
+                st.warning("Please fill in both Company and Role.")
+            else:
+                with st.spinner("Generating targeted questions via AI..."):
+                    try:
+                        questions = api_client.generate_company_questions(
+                            company=company,
+                            role=role,
+                            count=count,
+                            difficulty=difficulty,
+                        )
+                        if questions:
+                            st.session_state.cq_questions = questions
+                            st.session_state.cq_idx = 0
+                            st.session_state.cq_company = company
+                            st.session_state.cq_role = role
+                            st.session_state.cq_difficulty = difficulty
+                            st.session_state.cq_evaluations = {}
+                            st.session_state.cq_answers = {}
+                            st.session_state.cq_active = True
+                            st.rerun()
+                        else:
+                            st.error("No questions could be generated. Please try again.")
+                    except Exception as e:
+                        st.error(f"Error generating questions: {str(e)}")
+
+    else:
+        # Active One-by-One Question Session
+        total_q = len(st.session_state.cq_questions)
+        curr_idx = st.session_state.cq_idx
+        curr_q = st.session_state.cq_questions[curr_idx]
+
+        # Top progress bar and header
+        st.info(
+            f"🏢 **{st.session_state.cq_company}** | 🎯 **{st.session_state.cq_role}** | "
+            f"📊 **Difficulty:** {st.session_state.cq_difficulty} | **Question {curr_idx + 1} of {total_q}**"
+        )
+        st.progress((curr_idx + 1) / total_q)
+
+        st.markdown(f"### ❓ Question {curr_idx + 1}")
+        st.markdown(f"**{curr_q}**")
+
+        # Answer text box for the current question
+        saved_answer = st.session_state.cq_answers.get(curr_idx, "")
+        user_answer = st.text_area(
+            "Your Answer:",
+            value=saved_answer,
+            height=160,
+            key=f"cq_ans_box_{curr_idx}",
+            placeholder="Type your technical response in English...",
+        )
+
+        # Action Buttons
+        col_submit, col_prev, col_next, col_reset = st.columns([2, 1, 1, 1])
+
+        with col_submit:
+            if st.button("✅ Submit Answer", type="primary", key=f"btn_sub_{curr_idx}"):
+                if not user_answer.strip():
+                    st.warning("Please type an answer before submitting.")
+                else:
+                    st.session_state.cq_answers[curr_idx] = user_answer
+                    with st.spinner("Evaluating your response..."):
+                        try:
+                            eval_res = api_client.evaluate_answer(
+                                question=curr_q,
+                                answer=user_answer,
+                                role=st.session_state.cq_role,
+                            )
+                            st.session_state.cq_evaluations[curr_idx] = eval_res
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"Evaluation error: {str(e)}")
+
+        with col_prev:
+            if st.button("⬅️ Previous", disabled=(curr_idx == 0), key=f"btn_prev_{curr_idx}"):
+                st.session_state.cq_answers[curr_idx] = user_answer
+                st.session_state.cq_idx = max(0, curr_idx - 1)
+                st.rerun()
+
+        with col_next:
+            if st.button("Next ➡️", disabled=(curr_idx >= total_q - 1), key=f"btn_next_{curr_idx}"):
+                st.session_state.cq_answers[curr_idx] = user_answer
+                st.session_state.cq_idx = min(total_q - 1, curr_idx + 1)
+                st.rerun()
+
+        with col_reset:
+            if st.button("🏁 End Session", key=f"btn_end_{curr_idx}"):
+                st.session_state.cq_active = False
+                st.rerun()
+
+        # Display Evaluation if submitted for current question
+        if curr_idx in st.session_state.cq_evaluations:
+            eval_data = st.session_state.cq_evaluations[curr_idx]
+            score = eval_data.get("score", 5)
+            pct = eval_data.get("correctness_percent", score * 10)
+
+            st.markdown("---")
+            st.markdown("### 📊 Evaluation Feedback (in English)")
+
+            # Score metric
+            if score >= 7:
+                st.success(f"🎯 **Score: {score}/10 — {pct}% Correct**", icon="✅")
+            elif score >= 4:
+                st.warning(f"⚠️ **Score: {score}/10 — {pct}% Correct**", icon="⚡")
+            else:
+                st.error(f"❌ **Score: {score}/10 — {pct}% Correct**", icon="⚠️")
+
+            # Two distinct columns for What was correct & What's missing
+            col_c, col_m = st.columns(2)
+            with col_c:
+                st.markdown("#### ✅ What was correct:")
+                correct_text = eval_data.get("what_was_good") or "Key fundamentals were mentioned."
+                st.info(correct_text)
+
+            with col_m:
+                st.markdown("#### 🔍 What was missing:")
+                missing_text = eval_data.get("what_is_missing") or "Consider adding edge cases and architectural trade-offs."
+                st.warning(missing_text)
+
+            # Detailed Mentor Feedback
+            with st.expander("💡 View Detailed Mentor Feedback"):
+                st.write(eval_data.get("feedback", ""))
 
 
 # ============================================================
@@ -339,16 +457,34 @@ elif page == "🎤 Mock Interview":
                     if not answer.strip():
                         st.warning("Please write an answer first.")
                     else:
-                        with st.spinner("Evaluating answer via backend..."):
+                        with st.spinner("Evaluating answer in English..."):
                             try:
-                                score, feedback = api_client.evaluate_answer(
+                                eval_data = api_client.evaluate_answer(
                                     question=st.session_state.mi_current_question,
                                     answer=answer,
                                     role=st.session_state.mi_role,
                                 )
+                                score = eval_data.get("score", 5)
+                                pct = eval_data.get("correctness_percent", score * 10)
                                 st.session_state.mi_scores.append(score)
-                                st.success(f"Score: {score}/10")
-                                st.write(f"**Feedback:** {feedback}")
+
+                                if score >= 7:
+                                    st.success(f"🎯 **Score: {score}/10 — {pct}% Correct**", icon="✅")
+                                elif score >= 4:
+                                    st.warning(f"⚠️ **Score: {score}/10 — {pct}% Correct**", icon="⚡")
+                                else:
+                                    st.error(f"❌ **Score: {score}/10 — {pct}% Correct**", icon="⚠️")
+
+                                col_cg, col_cm = st.columns(2)
+                                with col_cg:
+                                    st.markdown("#### ✅ What was correct:")
+                                    st.info(eval_data.get("what_was_good", "Good attempt covering the basics."))
+                                with col_cm:
+                                    st.markdown("#### 🔍 What was missing:")
+                                    st.warning(eval_data.get("what_is_missing", "Consider adding more technical depth."))
+
+                                with st.expander("💡 Detailed Feedback"):
+                                    st.write(eval_data.get("feedback", ""))
                             except Exception as e:
                                 st.error(f"Evaluation failed: {str(e)}")
 

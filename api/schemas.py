@@ -88,6 +88,9 @@ class ScoreRequest(BaseModel):
 
 class ScoreResponse(BaseModel):
     score: int = Field(ge=1, le=10, description="Evaluation score between 1 and 10")
+    correctness_percent: Optional[int] = Field(default=None, description="Correctness percentage (10-100%)")
+    what_was_good: Optional[str] = Field(default="", description="What parts of the answer were accurate in English")
+    what_is_missing: Optional[str] = Field(default="", description="Key concepts or technical details missing in English")
     feedback: str = Field(..., description="Actionable constructive evaluation feedback")
 
 

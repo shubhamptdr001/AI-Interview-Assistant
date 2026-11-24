@@ -165,7 +165,7 @@ class APIClient:
         question: str,
         answer: str,
         role: str = "Software Engineer",
-    ) -> Tuple[int, str]:
+    ) -> Dict[str, Any]:
         """Score candidate answer via POST /score with fallback."""
         try:
             with httpx.Client(timeout=self.timeout) as client:
@@ -173,14 +173,15 @@ class APIClient:
                 res = client.post(f"{self.base_url}/score", json=payload)
                 if res.status_code == 200:
                     data = res.json()
-                    return data.get("score", 5), data.get("feedback", "")
+                    if "correctness_percent" not in data:
+                        data["correctness_percent"] = data.get("score", 5) * 10
+                    return data
         except Exception as e:
             logger.warning(f"Backend evaluate error ({e}); falling back to local core.")
 
         from core import score_answer as core_score
 
-        res = core_score(question, answer, role)
-        return res["score"], res["feedback"]
+        return core_score(question, answer, role)
 
     def get_coding_help(self, query: str) -> str:
         """Get coding help via POST /coding-help with fallback."""

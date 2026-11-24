@@ -41,7 +41,7 @@ class TestLLMCore:
     def test_score_answer_empty_returns_score_one(self):
         res = score_answer(question="What is OOP?", answer="", role="Java Developer")
         assert res["score"] == 1
-        assert "provide nahi kiya" in res["feedback"]
+        assert "submitting" in res["feedback"]
 
     def test_get_coding_help(self, mock_llm_response):
         res = get_coding_help("What is the difference between list and tuple?")
