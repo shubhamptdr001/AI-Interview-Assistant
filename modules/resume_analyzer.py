@@ -1,55 +1,44 @@
 """
 modules/resume_analyzer.py
 ---------------------------
-PDF/DOCX se text nikaalta hai aur skills match karta hai.
+Backward-compatibility adapter forwarding to core.resume.
 """
 
-from data.skills_bank import SKILLS_BANK
-
-
-def extract_text_from_pdf(uploaded_file):
-    try:
-        import PyPDF2
-    except ImportError:
-        raise ImportError(
-            "The 'PyPDF2' package is required to read PDF files. Install it with: pip install PyPDF2"
-        )
-    reader = PyPDF2.PdfReader(uploaded_file)
-    text = ""
-    for page in reader.pages:
-        text += page.extract_text() or ""
-    return text
-
-
-def extract_text_from_docx(uploaded_file):
-    try:
-        import docx
-    except ImportError:
-        raise ImportError(
-            "The 'python-docx' package is required to read DOCX files. Install it with: pip install python-docx"
-        )
-    document = docx.Document(uploaded_file)
-    text = "\n".join([para.text for para in document.paragraphs])
-    return text
+from core.resume import (
+    parse_resume,
+    extract_skills,
+    get_word_count,
+    analyze_resume,
+)
 
 
 def extract_text(uploaded_file):
-    if uploaded_file.name.lower().endswith(".pdf"):
-        return extract_text_from_pdf(uploaded_file)
-    elif uploaded_file.name.lower().endswith(".docx"):
-        return extract_text_from_docx(uploaded_file)
-    else:
+    """Backward-compatible wrapper for Streamlit uploaded file objects."""
+    if uploaded_file is None:
+        return None
+    try:
+        # Check if already bytes
+        if isinstance(uploaded_file, bytes):
+            return parse_resume(uploaded_file, "resume.pdf")
+
+        # Streamlit UploadedFile has getbuffer(), getvalue(), or read()
+        if hasattr(uploaded_file, "getvalue"):
+            file_bytes = uploaded_file.getvalue()
+        elif hasattr(uploaded_file, "read"):
+            file_bytes = uploaded_file.read()
+        else:
+            return None
+
+        filename = getattr(uploaded_file, "name", "resume.pdf")
+        return parse_resume(file_bytes, filename)
+    except Exception:
         return None
 
 
-def extract_skills(resume_text):
-    resume_text_lower = resume_text.lower()
-    found_skills = []
-    for skill in SKILLS_BANK:
-        if skill.lower() in resume_text_lower:
-            found_skills.append(skill)
-    return found_skills
-
-
-def get_word_count(resume_text):
-    return len(resume_text.split())
+__all__ = [
+    "extract_text",
+    "extract_skills",
+    "get_word_count",
+    "analyze_resume",
+    "parse_resume",
+]
