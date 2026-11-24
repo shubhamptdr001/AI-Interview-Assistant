@@ -7,6 +7,11 @@ Communicates strictly with the FastAPI backend REST API.
 
 import os
 import streamlit as st
+from dotenv import load_dotenv
+
+# Automatically load environment variables from .env
+load_dotenv()
+
 from client.api_client import api_client, BACKEND_URL
 
 APP_NAME = "AI Interview Assistant"
@@ -22,7 +27,7 @@ page = st.sidebar.radio(
     [
         "🏠 Home",
         "📄 Resume Analyzer",
-        "💬 PDF Chat (RAG)",
+        "💬 PDF Chat",
         "🏢 Company Questions",
         "💻 Coding Assistant",
         "🎤 Mock Interview",
@@ -38,21 +43,6 @@ if health:
 else:
     st.sidebar.warning(f"🟡 Backend Offline at `{BACKEND_URL}`")
     st.sidebar.caption("Run backend with: `uvicorn api.main:app --reload`")
-
-# Optional Groq Key Override
-groq_key = os.getenv("GROQ_API_KEY")
-if not groq_key:
-    user_key = st.sidebar.text_input(
-        "🔑 Groq API Key",
-        type="password",
-        placeholder="gsk_...",
-        help="Paste your Groq API key or set GROQ_API_KEY in .env",
-    )
-    if user_key:
-        os.environ["GROQ_API_KEY"] = user_key
-        st.sidebar.success("Key applied!")
-    else:
-        st.sidebar.caption("💡 Free key: [console.groq.com/keys](https://console.groq.com/keys)")
 
 st.sidebar.markdown("---")
 st.sidebar.caption("Architecture: Streamlit (Client) ➔ FastAPI ➔ Core / Groq")

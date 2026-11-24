@@ -9,6 +9,10 @@ import os
 import logging
 from typing import Any, Dict, List, Optional, Tuple
 import httpx
+from dotenv import load_dotenv
+
+# Load .env variables
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
