@@ -237,50 +237,75 @@ elif page == "🎤 Mock Interview":
     else:
         st.info(f"**Role:** {st.session_state.mi_role} | **Difficulty:** {st.session_state.mi_difficulty} | **Question:** {len(st.session_state.mi_questions)}")
 
-        st.markdown(f"### ❓ {st.session_state.mi_current_question}")
-        answer = st.text_area("Type your answer", height=150, key=f"answer_{len(st.session_state.mi_questions)}")
-
-        col1, col2, col3 = st.columns(3)
-
-        with col1:
-            if st.button("✅ Submit Answer", type="primary"):
-                if not answer.strip():
-                    st.warning("Please write an answer first.")
-                else:
-                    with st.spinner("Evaluating..."):
-                        score, feedback = evaluate_interview_answer(
+        # Handle API or generation error gracefully
+        if st.session_state.mi_current_question and st.session_state.mi_current_question.startswith("⚠️"):
+            st.error(st.session_state.mi_current_question)
+            col_retry, col_reset = st.columns(2)
+            with col_retry:
+                if st.button("🔄 Retry Question", type="primary"):
+                    with st.spinner("Generating question..."):
+                        prev = st.session_state.mi_questions[:-1] if len(st.session_state.mi_questions) > 1 else []
+                        q = generate_interview_question(
                             st.session_state.mi_role,
-                            st.session_state.mi_current_question,
-                            answer
+                            st.session_state.mi_difficulty,
+                            prev
                         )
-                    st.session_state.mi_scores.append(score)
-                    st.success(f"Score: {score}/10")
-                    st.write(f"**Feedback:** {feedback}")
+                        st.session_state.mi_current_question = q
+                        if st.session_state.mi_questions:
+                            st.session_state.mi_questions[-1] = q
+                    st.rerun()
+            with col_reset:
+                if st.button("🔄 Restart Interview"):
+                    st.session_state.mi_started = False
+                    st.session_state.mi_questions = []
+                    st.session_state.mi_scores = []
+                    st.session_state.mi_current_question = None
+                    st.rerun()
+        else:
+            st.markdown(f"### ❓ {st.session_state.mi_current_question}")
+            answer = st.text_area("Type your answer", height=150, key=f"answer_{len(st.session_state.mi_questions)}")
 
-        with col2:
-            if st.button("➡️ Next Question"):
-                with st.spinner("Preparing next question..."):
-                    q = generate_interview_question(
-                        st.session_state.mi_role,
-                        st.session_state.mi_difficulty,
-                        st.session_state.mi_questions
-                    )
-                st.session_state.mi_current_question = q
-                st.session_state.mi_questions.append(q)
-                st.rerun()
+            col1, col2, col3 = st.columns(3)
 
-        with col3:
-            if st.button("🏁 End Interview"):
-                st.session_state.mi_started = False
-                st.markdown("## 📊 Interview Summary")
-                total = len(st.session_state.mi_scores)
-                if total > 0:
-                    avg = sum(st.session_state.mi_scores) / total
-                    st.metric("Questions Attempted", total)
-                    st.metric("Average Score", round(avg, 1))
-                else:
-                    st.write("No answers were submitted.")
+            with col1:
+                if st.button("✅ Submit Answer", type="primary"):
+                    if not answer.strip():
+                        st.warning("Please write an answer first.")
+                    else:
+                        with st.spinner("Evaluating..."):
+                            score, feedback = evaluate_interview_answer(
+                                st.session_state.mi_role,
+                                st.session_state.mi_current_question,
+                                answer
+                            )
+                        st.session_state.mi_scores.append(score)
+                        st.success(f"Score: {score}/10")
+                        st.write(f"**Feedback:** {feedback}")
 
-                st.session_state.mi_questions = []
-                st.session_state.mi_scores = []
-                st.session_state.mi_current_question = None
+            with col2:
+                if st.button("➡️ Next Question"):
+                    with st.spinner("Preparing next question..."):
+                        q = generate_interview_question(
+                            st.session_state.mi_role,
+                            st.session_state.mi_difficulty,
+                            st.session_state.mi_questions
+                        )
+                    st.session_state.mi_current_question = q
+                    st.session_state.mi_questions.append(q)
+                    st.rerun()
+
+            with col3:
+                if st.button("🏁 End Interview"):
+                    st.session_state.mi_started = False
+                    st.markdown("## 📊 Interview Summary")
+                    total = len(st.session_state.mi_scores)
+                    if total > 0:
+                        avg = sum(st.session_state.mi_scores) / total
+                        st.metric("Questions Attempted", total)
+                        st.metric("Average Score", round(avg, 1))
+                    else:
+                        st.write("No answers were submitted.")
+
+                    st.session_state.mi_questions = []
+                    st.session_state.mi_scores = []
+                    st.session_state.mi_current_question = None

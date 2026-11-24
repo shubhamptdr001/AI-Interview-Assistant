@@ -4,7 +4,10 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MODEL = "llama-3.1-8b-instant"
+# Default to verified active model on Groq
+DEFAULT_MODEL = os.getenv("GROQ_MODEL", "qwen/qwen3.8-27b")
+
+_active_model = None
 
 
 def get_client():
@@ -14,6 +17,44 @@ def get_client():
     return Groq(api_key=api_key)
 
 
+def resolve_model(client):
+    global _active_model
+    if _active_model:
+        return _active_model
+
+    env_model = os.getenv("GROQ_MODEL")
+    if env_model:
+        _active_model = env_model
+        return _active_model
+
+    # Priority order of models to try
+    preferred_models = [
+        "qwen/qwen3.8-27b",
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "allam-2-7b",
+        "llama-3.3-70b-versatile",
+        "llama-3.1-8b-instant",
+    ]
+
+    try:
+        remote_models = [m.id for m in client.models.list().data]
+        for candidate in preferred_models:
+            if candidate in remote_models:
+                _active_model = candidate
+                return _active_model
+        # If no preferred model found, pick first non-whisper/non-guard model
+        for m in remote_models:
+            if "whisper" not in m and "guard" not in m:
+                _active_model = m
+                return _active_model
+    except Exception:
+        pass
+
+    _active_model = DEFAULT_MODEL
+    return _active_model
+
+
 def ask_llm(prompt, max_tokens=700):
     client = get_client()
     if not client:
@@ -21,15 +62,29 @@ def ask_llm(prompt, max_tokens=700):
             "⚠️ Groq API Key nahi mili! Kripya apna GROQ_API_KEY `.env` file mein set karein "
             "ya sidebar mein enter karein. (Get free key: https://console.groq.com/keys)"
         )
+
+    model_to_use = resolve_model(client)
     try:
         response = client.chat.completions.create(
-            model=MODEL,
+            model=model_to_use,
             messages=[{"role": "user", "content": prompt}],
             max_tokens=max_tokens,
         )
         return response.choices[0].message.content
     except Exception as e:
-        return f"⚠️ Groq API Error: {str(e)}"
+        err_msg = str(e)
+        # If model not found, try fallback to qwen
+        if "model_not_found" in err_msg or "404" in err_msg:
+            try:
+                response = client.chat.completions.create(
+                    model="qwen/qwen3.8-27b",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=max_tokens,
+                )
+                return response.choices[0].message.content
+            except Exception as e2:
+                return f"⚠️ Groq API Error: {str(e2)}"
+        return f"⚠️ Groq API Error: {err_msg}"
 
 
 def generate_rag_answer(context_chunks, question):
