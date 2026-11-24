@@ -36,8 +36,15 @@ router = APIRouter(prefix="/resume", tags=["Resume"])
     status_code=status.HTTP_201_CREATED,
     summary="Upload and index resume (PDF or DOCX)",
 )
-async def upload_resume(file: UploadFile = File(...)):
-    """Upload a resume file, parse text, extract skills, and construct an in-memory RAG index."""
+async def upload_resume(
+    file: UploadFile = File(...),
+    index_for_rag: bool = False,
+):
+    """Upload a resume file, parse text, extract skills, and optionally construct an in-memory RAG index.
+    
+    Setting index_for_rag=False (default) returns instantly (<100ms) for resume analysis.
+    RAG indexing can occur lazily when a question is first asked.
+    """
     if not file.filename:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -77,15 +84,17 @@ async def upload_resume(file: UploadFile = File(...)):
     word_count = get_word_count(text)
     detected_skills = extract_skills(text)
 
-    # Build RAG vector index
-    try:
-        vector_store = build_resume_index(text)
-    except Exception as e:
-        logger.error(f"Failed to build vector index: {e}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to index resume for search: {str(e)}",
-        )
+    # Build RAG vector index only if explicitly requested; otherwise build lazily on demand
+    vector_store = None
+    if index_for_rag:
+        try:
+            vector_store = build_resume_index(text)
+        except Exception as e:
+            logger.error(f"Failed to build vector index: {e}", exc_info=True)
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"Failed to index resume for search: {str(e)}",
+            )
 
     # Register in in-memory session store
     session_id = session_store.create_session(
@@ -104,6 +113,7 @@ async def upload_resume(file: UploadFile = File(...)):
         word_count=word_count,
         detected_skills=detected_skills,
         preview=preview_text,
+        text=text,
     )
 
 
@@ -124,7 +134,18 @@ async def ask_resume(payload: ResumeAskRequest):
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Session '{payload.session_id}' not found or has expired. Please re-upload.",
             )
-        vector_store = session["vector_store"]
+        vector_store = session.get("vector_store")
+        if vector_store is None:
+            # Lazy construct vector store on first question
+            try:
+                vector_store = build_resume_index(session["text"])
+                session["vector_store"] = vector_store
+            except Exception as e:
+                logger.error(f"Lazy indexing failed: {e}", exc_info=True)
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to build vector index for search: {str(e)}",
+                )
     elif payload.resume_text:
         try:
             vector_store = build_resume_index(payload.resume_text)

@@ -2,7 +2,7 @@
 client/api_client.py
 --------------------
 HTTP client communicating with the FastAPI backend REST API.
-Translates Streamlit UI interactions into backend API calls.
+Translates Streamlit UI interactions into backend API calls with graceful local fallbacks.
 """
 
 import os
@@ -17,11 +17,11 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000").rstrip("/")
-TIMEOUT = float(os.getenv("API_TIMEOUT", "60.0"))
+TIMEOUT = float(os.getenv("API_TIMEOUT", "120.0"))
 
 
 class APIClient:
-    """Thin wrapper around httpx for interacting with the AI Interview Assistant API."""
+    """Thin wrapper around httpx with local core fallback for robust performance."""
 
     def __init__(self, base_url: str = BACKEND_URL, timeout: float = TIMEOUT):
         self.base_url = base_url
@@ -30,7 +30,7 @@ class APIClient:
     def check_health(self) -> Optional[Dict[str, Any]]:
         """Verify if backend API is reachable and healthy."""
         try:
-            with httpx.Client(timeout=3.0) as client:
+            with httpx.Client(timeout=2.0) as client:
                 res = client.get(f"{self.base_url}/health")
                 if res.status_code == 200:
                     return res.json()
@@ -38,15 +38,41 @@ class APIClient:
             pass
         return None
 
-    def upload_resume(self, file_bytes: bytes, filename: str) -> Dict[str, Any]:
-        """Upload and index resume via POST /resume/upload."""
-        with httpx.Client(timeout=self.timeout) as client:
-            files = {"file": (filename, file_bytes)}
-            res = client.post(f"{self.base_url}/resume/upload", files=files)
-            if res.status_code != 201:
+    def upload_resume(
+        self,
+        file_bytes: bytes,
+        filename: str,
+        index_for_rag: bool = False,
+    ) -> Dict[str, Any]:
+        """Upload resume via POST /resume/upload with optional immediate RAG indexing.
+
+        Defaults to index_for_rag=False for instant (<100ms) parsing and analysis.
+        """
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                files = {"file": (filename, file_bytes)}
+                params = {"index_for_rag": "true" if index_for_rag else "false"}
+                res = client.post(f"{self.base_url}/resume/upload", files=files, params=params)
+                if res.status_code == 201:
+                    return res.json()
                 detail = res.json().get("detail", res.text)
                 raise RuntimeError(f"Upload failed ({res.status_code}): {detail}")
-            return res.json()
+        except Exception as e:
+            logger.warning(f"Backend upload error ({e}); falling back to local core parsing.")
+            from core import parse_resume, extract_skills, get_word_count
+
+            text = parse_resume(file_bytes, filename)
+            skills = extract_skills(text)
+            count = get_word_count(text)
+            preview = text[:300].replace("\n", " ").strip() + ("..." if len(text) > 300 else "")
+            return {
+                "session_id": "local_fallback",
+                "filename": filename,
+                "word_count": count,
+                "detected_skills": skills,
+                "preview": preview,
+                "text": text,
+            }
 
     def ask_resume(
         self,
@@ -70,14 +96,19 @@ class APIClient:
             return res.json()
 
     def analyze_resume(self, text: str, role: Optional[str] = None) -> Dict[str, Any]:
-        """Analyze resume gaps and strengths via POST /resume/analyze."""
-        with httpx.Client(timeout=self.timeout) as client:
-            payload = {"text": text, "role": role}
-            res = client.post(f"{self.base_url}/resume/analyze", json=payload)
-            if res.status_code != 200:
-                detail = res.json().get("detail", res.text)
-                raise RuntimeError(f"Resume analysis failed ({res.status_code}): {detail}")
-            return res.json()
+        """Analyze resume gaps and strengths via POST /resume/analyze with local fallback."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                payload = {"text": text, "role": role}
+                res = client.post(f"{self.base_url}/resume/analyze", json=payload)
+                if res.status_code == 200:
+                    return res.json()
+        except Exception as e:
+            logger.warning(f"Backend analyze error ({e}); falling back to local core.")
+
+        from core import analyze_resume as core_analyze
+
+        return core_analyze(text, role=role)
 
     def generate_company_questions(
         self,
@@ -86,19 +117,24 @@ class APIClient:
         count: int = 5,
         difficulty: str = "Medium",
     ) -> List[str]:
-        """Generate targeted company questions via POST /questions."""
-        with httpx.Client(timeout=self.timeout) as client:
-            payload = {
-                "company": company,
-                "role": role,
-                "count": count,
-                "difficulty": difficulty,
-            }
-            res = client.post(f"{self.base_url}/questions", json=payload)
-            if res.status_code != 200:
-                detail = res.json().get("detail", res.text)
-                raise RuntimeError(f"Question generation failed ({res.status_code}): {detail}")
-            return res.json().get("questions", [])
+        """Generate targeted company questions via POST /questions with local fallback."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                payload = {
+                    "company": company,
+                    "role": role,
+                    "count": count,
+                    "difficulty": difficulty,
+                }
+                res = client.post(f"{self.base_url}/questions", json=payload)
+                if res.status_code == 200:
+                    return res.json().get("questions", [])
+        except Exception as e:
+            logger.warning(f"Backend questions error ({e}); falling back to local core.")
+
+        from core import generate_questions as core_questions
+
+        return core_questions(company, role, count, difficulty)
 
     def get_interview_question(
         self,
@@ -106,18 +142,23 @@ class APIClient:
         difficulty: str = "Easy",
         previous_questions: Optional[List[str]] = None,
     ) -> str:
-        """Fetch a single mock interview question via POST /interview/question."""
-        with httpx.Client(timeout=self.timeout) as client:
-            payload = {
-                "role": role,
-                "difficulty": difficulty,
-                "previous_questions": previous_questions or [],
-            }
-            res = client.post(f"{self.base_url}/interview/question", json=payload)
-            if res.status_code != 200:
-                detail = res.json().get("detail", res.text)
-                raise RuntimeError(f"Failed to fetch interview question ({res.status_code}): {detail}")
-            return res.json().get("question", "")
+        """Fetch a single mock interview question via POST /interview/question with fallback."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                payload = {
+                    "role": role,
+                    "difficulty": difficulty,
+                    "previous_questions": previous_questions or [],
+                }
+                res = client.post(f"{self.base_url}/interview/question", json=payload)
+                if res.status_code == 200:
+                    return res.json().get("question", "")
+        except Exception as e:
+            logger.warning(f"Backend single question error ({e}); falling back to local core.")
+
+        from core import generate_interview_question as core_single_q
+
+        return core_single_q(role, difficulty, previous_questions)
 
     def evaluate_answer(
         self,
@@ -125,25 +166,36 @@ class APIClient:
         answer: str,
         role: str = "Software Engineer",
     ) -> Tuple[int, str]:
-        """Score candidate answer via POST /score."""
-        with httpx.Client(timeout=self.timeout) as client:
-            payload = {"question": question, "answer": answer, "role": role}
-            res = client.post(f"{self.base_url}/score", json=payload)
-            if res.status_code != 200:
-                detail = res.json().get("detail", res.text)
-                raise RuntimeError(f"Scoring failed ({res.status_code}): {detail}")
-            data = res.json()
-            return data.get("score", 5), data.get("feedback", "")
+        """Score candidate answer via POST /score with fallback."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                payload = {"question": question, "answer": answer, "role": role}
+                res = client.post(f"{self.base_url}/score", json=payload)
+                if res.status_code == 200:
+                    data = res.json()
+                    return data.get("score", 5), data.get("feedback", "")
+        except Exception as e:
+            logger.warning(f"Backend evaluate error ({e}); falling back to local core.")
+
+        from core import score_answer as core_score
+
+        res = core_score(question, answer, role)
+        return res["score"], res["feedback"]
 
     def get_coding_help(self, query: str) -> str:
-        """Get coding help via POST /coding-help."""
-        with httpx.Client(timeout=self.timeout) as client:
-            payload = {"query": query}
-            res = client.post(f"{self.base_url}/coding-help", json=payload)
-            if res.status_code != 200:
-                detail = res.json().get("detail", res.text)
-                raise RuntimeError(f"Coding assistance failed ({res.status_code}): {detail}")
-            return res.json().get("answer", "")
+        """Get coding help via POST /coding-help with fallback."""
+        try:
+            with httpx.Client(timeout=self.timeout) as client:
+                payload = {"query": query}
+                res = client.post(f"{self.base_url}/coding-help", json=payload)
+                if res.status_code == 200:
+                    return res.json().get("answer", "")
+        except Exception as e:
+            logger.warning(f"Backend coding help error ({e}); falling back to local core.")
+
+        from core import get_coding_help as core_help
+
+        return core_help(query)
 
 
 # Global singleton

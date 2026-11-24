@@ -23,6 +23,7 @@ class ResumeUploadResponse(BaseModel):
     word_count: int = Field(..., description="Total word count in resume")
     detected_skills: List[str] = Field(default_factory=list, description="Skills detected from SKILLS_BANK")
     preview: str = Field(..., description="First 300 characters excerpt of extracted resume text")
+    text: Optional[str] = Field(default="", description="Full extracted plain text from resume")
 
 
 class ResumeAskRequest(BaseModel):

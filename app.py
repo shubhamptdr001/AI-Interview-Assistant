@@ -101,10 +101,10 @@ elif page == "📄 Resume Analyzer":
         target_role = st.text_input("Target Role (optional, for gap analysis)", placeholder="e.g. AI Engineer, Full-Stack Developer")
 
         if st.button("📊 Analyze Resume", type="primary"):
-            with st.spinner("Parsing and analyzing resume via FastAPI backend..."):
+            with st.spinner("Analyzing resume..."):
                 try:
-                    # Upload and index via API
-                    upload_res = api_client.upload_resume(file_bytes, uploaded_file.name)
+                    # Instant upload without building unnecessary RAG vector index
+                    upload_res = api_client.upload_resume(file_bytes, uploaded_file.name, index_for_rag=False)
                     st.success("Resume parsed successfully!")
 
                     col1, col2 = st.columns(2)
@@ -120,7 +120,8 @@ elif page == "📄 Resume Analyzer":
 
                     # Deep analysis if role provided
                     if target_role.strip():
-                        analysis = api_client.analyze_resume(upload_res.get("preview", ""), role=target_role)
+                        full_resume_text = upload_res.get("text") or upload_res.get("preview", "")
+                        analysis = api_client.analyze_resume(full_resume_text, role=target_role)
                         st.markdown("---")
                         st.markdown(f"### 🎯 Role Match Assessment: **{target_role}**")
                         st.metric("Estimated Match Score", f"{analysis.get('estimated_match_score', 0)}/100")
@@ -139,7 +140,7 @@ elif page == "📄 Resume Analyzer":
                         st.text_area("Preview", upload_res.get("preview", ""), height=200)
 
                 except Exception as e:
-                    st.error(f"Error communicating with backend: {str(e)}")
+                    st.error(f"Error analyzing resume: {str(e)}")
 
 
 # ============================================================
@@ -161,7 +162,7 @@ elif page == "💬 PDF Chat (RAG)":
         if st.button("📚 Process Resume", type="primary"):
             with st.spinner("Building embeddings and vector store in backend..."):
                 try:
-                    res = api_client.upload_resume(rag_file.getvalue(), rag_file.name)
+                    res = api_client.upload_resume(rag_file.getvalue(), rag_file.name, index_for_rag=True)
                     st.session_state.rag_session_id = res["session_id"]
                     st.session_state.rag_filename = rag_file.name
                     st.success(f"Resume '{rag_file.name}' indexed! You can now ask questions below.")
