@@ -4,17 +4,32 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 MODEL = "llama-3.1-8b-instant"
 
 
+def get_client():
+    api_key = os.getenv("GROQ_API_KEY")
+    if not api_key:
+        return None
+    return Groq(api_key=api_key)
+
+
 def ask_llm(prompt, max_tokens=700):
-    response = client.chat.completions.create(
-        model=MODEL,
-        messages=[{"role": "user", "content": prompt}],
-        max_tokens=max_tokens,
-    )
-    return response.choices[0].message.content
+    client = get_client()
+    if not client:
+        return (
+            "⚠️ Groq API Key nahi mili! Kripya apna GROQ_API_KEY `.env` file mein set karein "
+            "ya sidebar mein enter karein. (Get free key: https://console.groq.com/keys)"
+        )
+    try:
+        response = client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            max_tokens=max_tokens,
+        )
+        return response.choices[0].message.content
+    except Exception as e:
+        return f"⚠️ Groq API Error: {str(e)}"
 
 
 def generate_rag_answer(context_chunks, question):
@@ -38,6 +53,8 @@ def generate_company_questions(company, role):
 Numbered list format mein do. Har question ke saath ek line mein bata do
 ki ye kis type ka hai (Technical / HR / Behavioral). Hinglish mein likho."""
     return ask_llm(prompt, max_tokens=800)
+
+
 def generate_interview_question(role, difficulty, previous_questions):
     prev_list = "\n".join(previous_questions) if previous_questions else "Koi nahi"
     prompt = f"""Tum ek technical interviewer ho jo "{role}" role ke liye interview le rahe ho.
@@ -62,12 +79,12 @@ FEEDBACK: <2-3 lines mein constructive feedback, Hinglish mein, kya achha tha au
 
     text = ask_llm(prompt, max_tokens=400)
 
-    score = 5
+    score = 0 if "⚠️" in text else 5
     feedback = text
     try:
         for line in text.split("\n"):
             if line.strip().startswith("SCORE:"):
-                digits = ''.join(filter(str.isdigit, line))
+                digits = "".join(filter(str.isdigit, line))
                 if digits:
                     score = int(digits)
             if line.strip().startswith("FEEDBACK:"):
@@ -76,6 +93,7 @@ FEEDBACK: <2-3 lines mein constructive feedback, Hinglish mein, kya achha tha au
         pass
 
     return score, feedback
+
 
 def coding_help(query):
     prompt = f"""Tum ek coding mentor ho jo interview preparation mein madad karte ho.

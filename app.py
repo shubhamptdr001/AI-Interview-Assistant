@@ -1,3 +1,4 @@
+import os
 import streamlit as st
 from utils.config import APP_NAME
 from modules.resume_analyzer import extract_text, extract_skills, get_word_count
@@ -24,6 +25,25 @@ page = st.sidebar.radio(
         "🎤 Mock Interview",
     ]
 )
+
+st.sidebar.markdown("---")
+
+# Groq API Key Configuration
+groq_key = os.getenv("GROQ_API_KEY")
+if not groq_key:
+    user_key = st.sidebar.text_input(
+        "🔑 Groq API Key",
+        type="password",
+        placeholder="gsk_...",
+        help="Paste your Groq API key here or add GROQ_API_KEY to your .env file.",
+    )
+    if user_key:
+        os.environ["GROQ_API_KEY"] = user_key
+        st.sidebar.success("API Key applied!")
+    else:
+        st.sidebar.caption("💡 Free key: [console.groq.com/keys](https://console.groq.com/keys)")
+else:
+    st.sidebar.success("⚡ Groq API Connected", icon="✅")
 
 st.sidebar.markdown("---")
 st.sidebar.caption("Built with Streamlit + Groq LLM")
