@@ -1,0 +1,37 @@
+# =====================================================================
+# render.yaml - Infrastructure Blueprint for Render.com Deployment
+# =====================================================================
+services:
+  # 1. FastAPI Backend REST API
+  - type: web
+    name: ai-interview-assistant-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile.api
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false # Set securely in Render dashboard
+      - key: GROQ_MODEL
+        value: qwen/qwen3.8-27b
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: PORT
+        value: 8000
+
+  # 2. Streamlit Thin Client Frontend
+  - type: web
+    name: ai-interview-assistant-ui
+    runtime: docker
+    dockerfilePath: ./Dockerfile.ui
+    plan: free
+    region: oregon
+    envVars:
+      - key: BACKEND_URL
+        fromService:
+          type: web
+          name: ai-interview-assistant-api
+          property: host
+      - key: PORT
+        value: 8501
