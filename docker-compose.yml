@@ -1,0 +1,47 @@
+services:
+  # --- Backend REST API ---
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: interview_assistant_api
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - GROQ_MODEL=${GROQ_MODEL:-qwen/qwen3.8-27b}
+      - CORS_ORIGINS=*
+      - RATE_LIMIT_PER_MINUTE=60/minute
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # --- Frontend Streamlit Thin Client ---
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.ui
+    container_name: interview_assistant_ui
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://api:8000
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 20s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+networks:
+  default:
+    name: interview_assistant_network

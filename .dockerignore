@@ -1,0 +1,37 @@
+# Git and VCS
+.git/
+.gitignore
+
+# Environment & Secrets (NEVER bake into image)
+.env
+.env.*
+!.env.example
+
+# Python caches
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
+dist/
+build/
+venv/
+env/
+
+# IDE & Editor caches
+.idea/
+.vscode/
+.DS_Store
+
+# Temporary & Upload directories
+uploads/*
+!uploads/.gitkeep
+vector_db/*
+!vector_db/.gitkeep
+
+# Notebooks & test artifacts
+*.ipynb
+tests/
